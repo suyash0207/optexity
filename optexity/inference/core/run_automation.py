@@ -419,29 +419,52 @@ async def run_final_logging(
 
 
 def _start_repair_watcher(action_node: ActionNode, browser: Browser):
-    """Start the self-healing watcher for one step, if it applies.
+    """Start the step watcher (self-healing and/or step report), if it applies.
 
-    Returns `(watcher, old_command)`, or `(None, None)` when self-healing is off,
-    we are not using a local workflow file, or the step has no command to repair.
-    Never raises: self-healing must not be able to break a normal run.
+    Returns `(watcher, old_command)`. `watcher` is None when both switches
+    (OPTEXITY_WRITE_BACK, OPTEXITY_STEP_REPORT) are off, or when we are not
+    using a local workflow file in dev mode. `old_command` is the step's
+    command, or None if it has none.
+    Never raises: this must not be able to break a normal run.
     """
     try:
-        if not (settings.WRITE_BACK and settings.DEPLOYMENT == "dev"):
+        if not (settings.WRITE_BACK or settings.STEP_REPORT):
+            return None, None
+        if settings.DEPLOYMENT != "dev":
             return None, None
         if not os.path.isfile(settings.TEST_AUTOMATION_FILE):
             return None, None
 
         from optexity.memory.writeback import RepairWatcher, command_of_action_node
 
-        old_command = command_of_action_node(action_node)
-        if old_command is None:
-            return None, None
         watcher = RepairWatcher(browser)
         watcher.start()
-        return watcher, old_command
+        return watcher, command_of_action_node(action_node)
     except Exception as e:
-        logger.debug(f"Self-healing watcher not started: {type(e).__name__}: {e}")
+        logger.debug(f"Step watcher not started: {type(e).__name__}: {e}")
         return None, None
+
+
+def _write_step_report(
+    watcher, node_index: int, action_node: ActionNode, old_command, started: float, error
+) -> None:
+    """Append this step's outcome to the run report, if step reports are on.
+
+    Never raises: reporting must not be able to fail a task.
+    """
+    if watcher is None or not settings.STEP_REPORT:
+        return
+    try:
+        from optexity.memory.writeback import append_step_report
+
+        append_step_report(
+            settings.TEST_AUTOMATION_FILE,
+            watcher.report_entry(
+                node_index, action_node, old_command, time.time() - started, error
+            ),
+        )
+    except Exception as e:
+        logger.debug(f"Could not write step report: {type(e).__name__}: {e}")
 
 
 async def run_action_node(
@@ -481,6 +504,8 @@ async def run_action_node(
     # Self-healing (off by default): watch this step so that, if its command breaks
     # and the LLM fallback fixes it, the repaired command is saved to the local file.
     repair_watcher, old_command = _start_repair_watcher(action_node, browser)
+    step_started = time.time()
+    step_error: str | None = None
 
     try:
         if action_node.interaction_action:
@@ -490,7 +515,7 @@ async def run_action_node(
             await run_interaction_action(
                 action_node.interaction_action, task, memory, browser, 2
             )
-            if repair_watcher is not None:
+            if repair_watcher is not None and settings.WRITE_BACK:
                 repair_watcher.finish(
                     settings.TEST_AUTOMATION_FILE,
                     memory.automation_state.step_index,
@@ -534,9 +559,18 @@ async def run_action_node(
                 await run_count_locator_action(misc.count_locator, memory, browser)
 
     except Exception as e:
+        step_error = f"{type(e).__name__}: {e}"
         logger.error(f"Error running node {memory.automation_state.step_index}: {e}")
         raise e
     finally:
+        _write_step_report(
+            repair_watcher,
+            memory.automation_state.step_index,
+            action_node,
+            old_command,
+            step_started,
+            step_error,
+        )
         if repair_watcher is not None:
             repair_watcher.stop()
         await save_latest_memory_state_locally(task, memory, action_node)

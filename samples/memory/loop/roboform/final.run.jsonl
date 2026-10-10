@@ -1,0 +1,4 @@
+{"node_index": 0, "outcome": "command_ok", "command": "locator(\"xpath=html/body/div[2]/form/div/div[1]/div[5]/div[2]/input\")", "seconds": 0.23, "error": null, "verified_locators": []}
+{"node_index": 1, "outcome": "command_ok", "command": "locator(\"xpath=html/body/div[2]/form/div/div[1]/div[8]/div[2]/input\")", "seconds": 0.2, "error": null, "verified_locators": []}
+{"node_index": 2, "outcome": "command_ok", "command": "locator(\"xpath=html/body/div[2]/form/div/div[1]/div[9]/div[2]/input\")", "seconds": 0.21, "error": null, "verified_locators": []}
+{"node_index": 3, "outcome": "command_ok", "command": "locator(\"xpath=html/body/div[2]/form/div/div[1]/div[10]/div[2]/input\")", "seconds": 0.22, "error": null, "verified_locators": []}

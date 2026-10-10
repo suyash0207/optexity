@@ -29,3 +29,17 @@ agentic run ──> recorder ──> actions.json ──> compiler ──> cache
 Compile by hand: `python -m optexity.memory.compiler actions.json cached.json`.
 
 Tests: `pytest tests/memory` (no browser, no LLM). Evidence from real runs: `samples/memory/RESULTS.md`.
+
+## Bonus: LLM builder and iterative loop
+
+| File | What it does |
+|---|---|
+| `llm_builder.py` | Asks an LLM (given the real Optexity docs from `docs/docs/`) to improve the rule-based workflow. The answer is accepted only if it passes Optexity's `Automation` Pydantic model and our checks (same URL, only locators that were verified on a live page, only recorded typed values, secrets untouched). Errors are sent back to the LLM; after N failures the rule-based workflow is kept. |
+| `loop.py` | Runs the workflow through a local server, reads the per-step report (`OPTEXITY_STEP_REPORT=true` writes `<workflow>.run.jsonl`), rebuilds with the LLM, and repeats until every step passes on its exact command or the round limit is hit. Old files are kept as `<name>.roundN.json`. |
+
+```bash
+python -m optexity.memory.loop --actions actions.json --workflow cached.json \
+  --endpoint <name> --input stock_ticker=AAPL --rounds 3
+```
+
+Real runs: `samples/memory/loop/RESULTS.md`.

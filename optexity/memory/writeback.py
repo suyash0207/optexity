@@ -161,10 +161,11 @@ class RepairWatcher:
         self.browser = browser
         self._locators: list[LocatorCandidate] = []
         self._action_ok: bool | None = None
+        self._fallback_seen = False  # True once the fallback agent touched an element
 
     def start(self) -> None:
         """Begin listening to the fallback agent (if there is one)."""
-        self._locators, self._action_ok = [], None
+        self._locators, self._action_ok, self._fallback_seen = [], None, False
         agent = getattr(self.browser, "backend_agent", None)
         if agent is not None:
             agent.register_action_callback = self.on_action
@@ -185,6 +186,7 @@ class RepairWatcher:
             if event.action_name not in _ELEMENT_ACTIONS:
                 return
             if event.phase == "before" and event.element is not None:
+                self._fallback_seen = True
                 self._locators = await checked_locators(self.browser, event.element)
                 self._action_ok = None
             elif event.phase == "after":
@@ -202,6 +204,35 @@ class RepairWatcher:
             return None
         best = next((c for c in self._locators if c.unique), None)
         return (best.locator, best.kind) if best else None
+
+    def report_entry(
+        self,
+        node_index: int,
+        action_node: Any,
+        old_command: str | None,
+        seconds: float,
+        error: str | None = None,
+    ) -> dict[str, Any]:
+        """Build the one-line outcome record for this step (see `step_outcome`).
+
+        For a step the fallback rescued, it also lists the locators that were
+        checked on the live page and matched exactly once, so a later rebuild
+        can use a real, verified locator instead of guessing.
+        """
+        return {
+            "node_index": node_index,
+            "outcome": step_outcome(action_node, self._fallback_seen, error),
+            "command": old_command,
+            "seconds": round(seconds, 2),
+            "error": error,
+            "verified_locators": [
+                {"locator": c.locator, "kind": c.kind}
+                for c in self._locators
+                if c.unique
+            ]
+            if self._fallback_seen
+            else [],
+        }
 
     def finish(
         self, workflow_path: str | Path, node_index: int, old_command: str | None
@@ -229,6 +260,40 @@ class RepairWatcher:
                 f"Self-healed step {node_index}: {old_command!r} -> {new_command!r} ({kind})"
             )
         return changed
+
+
+def step_outcome(action_node: Any, fallback_seen: bool, error: str | None) -> str:
+    """Name what happened to one step, in one word.
+
+    * `failed`      - the step raised an error
+    * `agentic`     - the step is an `agentic_task` (an LLM agent, not a command)
+    * `no_command`  - some other step with no command (extraction, sleep...)
+    * `fallback_ok` - the command broke and the LLM fallback saved the step
+    * `command_ok`  - the exact command worked, no LLM used
+    """
+    if error:
+        return "failed"
+    interaction = getattr(action_node, "interaction_action", None)
+    if interaction is not None and getattr(interaction, "agentic_task", None) is not None:
+        return "agentic"
+    if command_of_action_node(action_node) is None:
+        return "no_command"
+    return "fallback_ok" if fallback_seen else "command_ok"
+
+
+def step_report_path(workflow_path: str | Path) -> Path:
+    """Where per-step outcomes for a workflow file are kept.
+
+    Example: `cached.json` -> `cached.run.jsonl` (same folder).
+    """
+    path = Path(workflow_path)
+    return path.with_name(path.stem + ".run.jsonl")
+
+
+def append_step_report(workflow_path: str | Path, entry: dict[str, Any]) -> None:
+    """Add one line (one step's outcome) to the workflow's run report."""
+    with open(step_report_path(workflow_path), "a") as report:
+        report.write(json.dumps(entry) + "\n")
 
 
 def command_of_action_node(action_node: Any) -> str | None:

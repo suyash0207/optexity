@@ -154,3 +154,41 @@ def test_command_of_action_node():
     click.skip_command = True
     assert command_of_action_node(node) is None
     assert command_of_action_node(SimpleNamespace(interaction_action=None)) is None
+
+
+# --- step report (used by the loop) ----------------------------------------
+
+
+def _node(**interaction):
+    return SimpleNamespace(interaction_action=SimpleNamespace(**interaction))
+
+
+def test_step_outcome_names():
+    from optexity.memory.writeback import step_outcome
+
+    click = SimpleNamespace(command="get_by_role('button')", skip_command=False)
+    assert step_outcome(_node(click_element=click, agentic_task=None), False, None) == "command_ok"
+    assert step_outcome(_node(click_element=click, agentic_task=None), True, None) == "fallback_ok"
+    assert step_outcome(_node(click_element=click, agentic_task=None), False, "boom") == "failed"
+    assert step_outcome(_node(agentic_task=SimpleNamespace(task="x")), False, None) == "agentic"
+    assert step_outcome(SimpleNamespace(interaction_action=None), False, None) == "no_command"
+
+
+def test_report_entry_lists_only_verified_locators_when_fallback_was_used(tmp_path):
+    from optexity.memory.writeback import append_step_report, step_report_path
+
+    path = _workflow(tmp_path)
+    watcher = RepairWatcher(_FakeBrowser())
+    asyncio.run(watcher.on_action(_event("before")))
+    asyncio.run(watcher.on_action(_event("after", success=True)))
+
+    click = SimpleNamespace(command=OLD, skip_command=False)
+    node = _node(click_element=click, agentic_task=None)
+    entry = watcher.report_entry(1, node, OLD, 1.234)
+    assert entry["outcome"] == "fallback_ok"
+    assert {"locator": NEW, "kind": "name"} in entry["verified_locators"]
+    assert all(v["locator"] for v in entry["verified_locators"])
+
+    append_step_report(path, entry)
+    lines = step_report_path(path).read_text().splitlines()
+    assert json.loads(lines[0])["node_index"] == 1

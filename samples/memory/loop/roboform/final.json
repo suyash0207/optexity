@@ -1,0 +1,54 @@
+{
+  "url": "https://www.roboform.com/filling-test-all-fields",
+  "automation_description": "Compiled from agentic task: fill the full name as myname, address line one as xyz and line 2 as abc, city as SF",
+  "parameters": {
+    "input_parameters": {},
+    "generated_parameters": {}
+  },
+  "nodes": [
+    {
+      "type": "action_node",
+      "interaction_action": {
+        "input_text": {
+          "command": "locator(\"xpath=html/body/div[2]/form/div/div[1]/div[5]/div[2]/input\")",
+          "prompt_instructions": "Type 'myname' into the full name input field.",
+          "input_text": "myname"
+        }
+      },
+      "end_sleep_time": 0.2
+    },
+    {
+      "type": "action_node",
+      "interaction_action": {
+        "input_text": {
+          "command": "locator(\"xpath=html/body/div[2]/form/div/div[1]/div[8]/div[2]/input\")",
+          "prompt_instructions": "Type 'xyz' into the address line 1 input field.",
+          "input_text": "xyz"
+        }
+      },
+      "end_sleep_time": 0.2
+    },
+    {
+      "type": "action_node",
+      "interaction_action": {
+        "input_text": {
+          "command": "locator(\"xpath=html/body/div[2]/form/div/div[1]/div[9]/div[2]/input\")",
+          "prompt_instructions": "Type 'abc' into the address line 2 input field.",
+          "input_text": "abc"
+        }
+      },
+      "end_sleep_time": 0.2
+    },
+    {
+      "type": "action_node",
+      "interaction_action": {
+        "input_text": {
+          "command": "locator(\"xpath=html/body/div[2]/form/div/div[1]/div[10]/div[2]/input\")",
+          "prompt_instructions": "Type 'SF' into the city input field.",
+          "input_text": "SF"
+        }
+      },
+      "end_sleep_time": 0.2
+    }
+  ]
+}

@@ -94,6 +94,14 @@ class Settings(LLMSettings):
         validation_alias=AliasChoices("OPTEXITY_WRITE_BACK", "WRITE_BACK"),
     )
 
+    # Write one line per step (command_ok / fallback_ok / failed / agentic) to
+    # `<workflow>.run.jsonl` next to the local workflow file. Used by the loop.
+    # Env var: OPTEXITY_STEP_REPORT
+    STEP_REPORT: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("OPTEXITY_STEP_REPORT", "STEP_REPORT"),
+    )
+
     @model_validator(mode="after")
     def validate_local_callback_url(self):
         if self.DEPLOYMENT == "prod" and self.LOCAL_CALLBACK_URL is not None:
